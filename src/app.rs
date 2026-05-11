@@ -96,7 +96,7 @@ impl ExtraLinkApp {
 
             // Collect all results from channel after crawl finishes
             let mut collected = Vec::new();
-            while let Ok((result, stats)) = rx.blocking_recv() {
+            while let Some((result, stats)) = rx.blocking_recv() {
                 collected.push((result, stats));
             }
             collected
