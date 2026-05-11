@@ -29,7 +29,7 @@ impl ExtraLinkApp {
         if let Ok(font_data) = std::fs::read(&font_path) {
             fonts.font_data.insert(
                 "simsun".to_owned(),
-                std::sync::Arc::new(egui::FontData::from_owned(font_data)),
+                egui::FontData::from_owned(font_data),
             );
             fonts
                 .families
