@@ -21,6 +21,8 @@ pub struct ExtraLinkApp {
     pub result_receiver: Option<Arc<Mutex<mpsc::Receiver<(CrawlResult, CrawlStats)>>>>,
     pub show_debug: bool,
     pub current_crawl_url: String,
+    /// Maximum results to display in UI (prevents lag from huge result sets)
+    pub max_displayed_results: usize,
 }
 
 impl ExtraLinkApp {
@@ -62,6 +64,7 @@ impl ExtraLinkApp {
             result_receiver: None,
             show_debug: false,
             current_crawl_url: String::new(),
+            max_displayed_results: 1000,
         }
     }
 
@@ -111,6 +114,9 @@ impl ExtraLinkApp {
             stop_flag.store(true, Ordering::Relaxed);
         }
         self.is_crawling = false;
+        // Clean up receiver and handle to prevent resource leaks
+        self.result_receiver = None;
+        self.crawl_handle = None;
     }
 
     pub fn export_csv(&self) -> Result<(), String> {
@@ -134,10 +140,17 @@ impl ExtraLinkApp {
     }
 
     fn poll_results(&mut self) {
-        // Drain all available results from the channel
+        // Limit how many results we process per frame to prevent UI stutter
+        const MAX_RESULTS_PER_FRAME: usize = 50;
+
         if let Some(ref receiver) = self.result_receiver {
             if let Ok(mut rx) = receiver.lock() {
+                let mut processed = 0;
                 loop {
+                    if processed >= MAX_RESULTS_PER_FRAME {
+                        // Only request repaint if we hit the limit (more results pending)
+                        return;
+                    }
                     match rx.try_recv() {
                         Ok((result, stats)) => {
                             // Skip placeholder results (in-progress updates)
@@ -145,6 +158,7 @@ impl ExtraLinkApp {
                                 self.results.push((result.external_url, result.source_url));
                             }
                             self.stats = stats;
+                            processed += 1;
                         }
                         Err(TryRecvError::Empty) => break,
                         Err(TryRecvError::Disconnected) => break,
@@ -169,8 +183,8 @@ impl eframe::App for ExtraLinkApp {
         // Poll for results if crawling
         if self.is_crawling {
             self.poll_results();
-            // Request repaint to update UI
-            ctx.request_repaint();
+            // Throttle repaints to ~30fps (33ms) to avoid UI stutter
+            ctx.request_repaint_after(std::time::Duration::from_millis(33));
         }
 
         // Top panel for inputs
@@ -256,22 +270,57 @@ impl eframe::App for ExtraLinkApp {
                 ui.label("外部链接");
                 ui.label("          所在页面");
             });
+
+            // Show warning if results are limited
+            let total_results = self.results.len();
+            let displayed_results = self.results.iter().rev().take(self.max_displayed_results).count();
+            if total_results > self.max_displayed_results {
+                ui.label(egui::Color32::YELLOW, format!(
+                    "显示最新 {} / {} 条结果 (结果过多，已限制显示)",
+                    displayed_results, total_results
+                ));
+            }
             ui.separator();
 
-            // Results table - fills remaining space
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for (external, source) in &self.results {
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.hyperlink_to(external, external).clicked() {
-                            let _ = open::that(external);
+            // Results table - use show_rows for efficient virtualized rendering
+            // This only renders visible rows, preventing lag with large result sets
+            let row_height = 24.0;
+            let available_height = ui.available_height();
+            let num_visible_rows = (available_height / row_height).ceil() as usize;
+            let total_rows = std::cmp::min(total_results, self.max_displayed_results);
+
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show_rows(ui, row_height, total_rows, |ui, row_range| {
+                    // Convert row indices to result indices (newest first)
+                    for row in row_range {
+                        let result_idx = total_results - 1 - row;
+                        if let Some((external, source)) = self.results.get(result_idx) {
+                            ui.horizontal(|ui| {
+                                // Use selectable_label for external URL (shows full URL on hover)
+                                let ext_short = if external.len() > 60 {
+                                    format!("{}...", &external[..60])
+                                } else {
+                                    external.clone()
+                                };
+                                let ext_response = ui.selectable_label(false, ext_short);
+                                if ext_response.clicked() {
+                                    let _ = open::that(external);
+                                }
+                                ui.label("<-");
+                                let src_short = if source.len() > 60 {
+                                    format!("{}...", &source[..60])
+                                } else {
+                                    source.clone()
+                                };
+                                let src_response = ui.selectable_label(false, src_short);
+                                if src_response.clicked() {
+                                    let _ = open::that(source);
+                                }
+                            });
                         }
-                        ui.label("<-");
-                        if ui.hyperlink_to(source, source).clicked() {
-                            let _ = open::that(source);
-                        }
-                    });
-                }
-            });
+                    }
+                });
         });
 
         // Bottom panel for status

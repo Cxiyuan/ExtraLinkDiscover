@@ -111,7 +111,6 @@ impl Crawler {
                 let base_domain = base_domain.clone();
                 let stop_flag = stop_flag.clone();
                 let url_for_processing = url.clone();
-                let url_for_parser = url.clone();
 
                 let handle = tokio::spawn(async move {
                     if stop_flag.load(Ordering::Relaxed) {
@@ -133,7 +132,7 @@ impl Crawler {
                                     }
 
                                     if let Some(href) = element.value().attr("href") {
-                                        let full_url = Url::parse(&url_for_parser)
+                                        let full_url = Url::parse(&url_for_processing)
                                             .ok()
                                             .and_then(|u| u.join(href).ok())
                                             .map(|u| u.to_string())
