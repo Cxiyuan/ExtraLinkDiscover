@@ -168,7 +168,7 @@ impl eframe::App for ExtraLinkApp {
         }
 
         // Top panel for inputs
-        egui::TopBottomPanel::top(ctx, |ui| {
+        egui::TopBottomPanel::top(egui::Id::new("top_panel"), |ui| {
             // Error message area
             if let Some(ref err) = self.error_message {
                 ui.colored_label(egui::Color32::RED, err);
@@ -268,7 +268,7 @@ impl eframe::App for ExtraLinkApp {
         });
 
         // Bottom panel for status
-        egui::TopBottomPanel::bottom(ctx, |ui| {
+        egui::TopBottomPanel::bottom(egui::Id::new("bottom_panel"), |ui| {
             ui.horizontal(|ui| {
                 let status = if self.is_crawling { "爬取中" } else { "已停止" };
                 ui.label(format!("状态: {}  已爬取: {}  已发现: {}",
