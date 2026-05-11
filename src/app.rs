@@ -86,6 +86,16 @@ impl ExtraLinkApp {
         self.is_crawling = false;
     }
 
+    pub fn export_csv(&self) -> Result<(), String> {
+        let mut wtr = csv::Writer::from_path("results.csv").map_err(|e| e.to_string())?;
+        wtr.write_record(&["外部链接", "所在页面"]).map_err(|e| e.to_string())?;
+        for (url, source) in &self.results {
+            wtr.write_record(&[url, source]).map_err(|e| e.to_string())?;
+        }
+        wtr.flush().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     fn poll_results(&mut self) {
         if let Some(handle) = self.crawl_thread.take() {
             if handle.is_finished() {
@@ -180,6 +190,13 @@ impl eframe::App for ExtraLinkApp {
             });
 
             ui.separator();
+
+            // Export button
+            if ui.button("导出CSV").clicked() {
+                if let Err(e) = self.export_csv() {
+                    self.error_message = Some(format!("导出失败: {}", e));
+                }
+            }
 
             // Status bar
             let status = if self.is_crawling { "爬取中" } else { "已停止" };
