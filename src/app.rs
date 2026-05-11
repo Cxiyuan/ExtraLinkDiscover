@@ -78,7 +78,7 @@ impl ExtraLinkApp {
         // Spawn a thread with a tokio runtime
         self.crawl_thread = Some(thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-            let (tx, rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(100);
+            let (tx, mut rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(100);
 
             let filter = if filter_domains.is_empty() {
                 DomainFilter::new("")
