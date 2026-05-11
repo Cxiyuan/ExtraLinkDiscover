@@ -289,7 +289,7 @@ impl eframe::App for ExtraLinkApp {
             let total_results = self.results.len();
             let displayed_results = self.results.iter().rev().take(self.max_displayed_results).count();
             if total_results > self.max_displayed_results {
-                ui.label(egui::Color32::YELLOW, format!(
+                ui.colored_label(egui::Color32::YELLOW, format!(
                     "显示最新 {} / {} 条结果 (结果过多，已限制显示)",
                     displayed_results, total_results
                 ));
