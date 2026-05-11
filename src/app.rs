@@ -55,7 +55,7 @@ impl ExtraLinkApp {
             filter_domains: String::new(),
             results: Vec::new(),
             is_crawling: false,
-            stats: CrawlStats { pages_crawled: 0, links_found: 0 },
+            stats: CrawlStats { pages_crawled: 0, links_found: 0, current_url: String::new() },
             error_message: None,
             stop_flag: None,
             crawl_handle: None,
@@ -125,7 +125,7 @@ impl ExtraLinkApp {
 
     pub fn clear_results(&mut self) {
         self.results.clear();
-        self.stats = CrawlStats { pages_crawled: 0, links_found: 0 };
+        self.stats = CrawlStats { pages_crawled: 0, links_found: 0, current_url: String::new() };
         self.error_message = None;
     }
 
