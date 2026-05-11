@@ -1,6 +1,6 @@
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::crawler::{CrawlResult, Crawler, CrawlStats};
@@ -16,7 +16,8 @@ pub struct ExtraLinkApp {
     pub stats: CrawlStats,
     pub error_message: Option<String>,
     pub stop_flag: Option<Arc<AtomicBool>>,
-    pub crawl_thread: Option<thread::JoinHandle<Vec<(CrawlResult, CrawlStats)>>>,
+    pub crawl_handle: Option<thread::JoinHandle<()>>,
+    pub result_receiver: Option<Arc<Mutex<mpsc::Receiver<(CrawlResult, CrawlStats)>>>>,
 }
 
 impl ExtraLinkApp {
@@ -54,7 +55,8 @@ impl ExtraLinkApp {
             stats: CrawlStats { pages_crawled: 0, links_found: 0 },
             error_message: None,
             stop_flag: None,
-            crawl_thread: None,
+            crawl_handle: None,
+            result_receiver: None,
         }
     }
 
@@ -76,31 +78,26 @@ impl ExtraLinkApp {
         self.error_message = None;
 
         // Spawn a thread with a tokio runtime
-        self.crawl_thread = Some(thread::spawn(move || {
+        let (tx, rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(1000);
+        let result_receiver = Arc::new(Mutex::new(rx));
+
+        let filter = if filter_domains.is_empty() {
+            DomainFilter::new("")
+        } else {
+            DomainFilter::new(&filter_domains)
+        };
+
+        let crawler = Crawler::new(filter, concurrency);
+        let stop_flag_clone = stop_flag.clone();
+
+        self.crawl_handle = Some(thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-            let (tx, mut rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(100);
-
-            let filter = if filter_domains.is_empty() {
-                DomainFilter::new("")
-            } else {
-                DomainFilter::new(&filter_domains)
-            };
-
-            let crawler = Crawler::new(filter, concurrency);
-            let stop_flag_clone = stop_flag.clone();
-
-            // Run the crawl in async context
             rt.block_on(async {
-                let _ = crawler.crawl(&start_url, tx, stop_flag_clone).await;
+                crawler.crawl(&start_url, tx, stop_flag_clone).await;
             });
-
-            // Collect all results from channel after crawl finishes
-            let mut collected = Vec::new();
-            while let Some((result, stats)) = rx.blocking_recv() {
-                collected.push((result, stats));
-            }
-            collected
         }));
+
+        self.result_receiver = Some(result_receiver);
     }
 
     pub fn stop_crawl(&mut self) {
@@ -121,18 +118,29 @@ impl ExtraLinkApp {
     }
 
     fn poll_results(&mut self) {
-        if let Some(handle) = self.crawl_thread.take() {
-            if handle.is_finished() {
-                if let Ok(results) = handle.join() {
-                    for (result, stats) in results {
-                        self.results.push((result.external_url, result.source_url));
-                        self.stats = stats;
+        // Drain all available results from the channel
+        if let Some(ref receiver) = self.result_receiver {
+            if let Ok(rx) = receiver.lock() {
+                while let Ok(Some((result, stats))) = {
+                    // Try to recv without blocking
+                    match rx.try_recv() {
+                        Ok(item) => Ok(Some(item)),
+                        Err(mpsc::error::TryRecvError::Empty) => Ok(None),
+                        Err(mpsc::error::TryRecvError::Disconnected) => Ok(None),
                     }
+                }) {
+                    self.results.push((result.external_url, result.source_url));
+                    self.stats = stats;
                 }
+            }
+        }
+
+        // Check if crawl is finished
+        if let Some(handle) = self.crawl_handle.take() {
+            if handle.is_finished() {
                 self.is_crawling = false;
             } else {
-                // Put it back if not finished
-                self.crawl_thread = Some(handle);
+                self.crawl_handle = Some(handle);
             }
         }
     }
