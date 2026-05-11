@@ -6,6 +6,7 @@ use std::thread;
 use crate::crawler::{CrawlResult, Crawler, CrawlStats};
 use crate::filter::DomainFilter;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TryRecvError;
 
 pub struct ExtraLinkApp {
     pub url: String,
@@ -121,16 +122,15 @@ impl ExtraLinkApp {
         // Drain all available results from the channel
         if let Some(ref receiver) = self.result_receiver {
             if let Ok(rx) = receiver.lock() {
-                while let Ok(Some((result, stats))) = {
-                    // Try to recv without blocking
+                loop {
                     match rx.try_recv() {
-                        Ok(item) => Ok(Some(item)),
-                        Err(mpsc::error::TryRecvError::Empty) => Ok(None),
-                        Err(mpsc::error::TryRecvError::Disconnected) => Ok(None),
+                        Ok((result, stats)) => {
+                            self.results.push((result.external_url, result.source_url));
+                            self.stats = stats;
+                        }
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => break,
                     }
-                }) {
-                    self.results.push((result.external_url, result.source_url));
-                    self.stats = stats;
                 }
             }
         }
