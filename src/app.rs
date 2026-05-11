@@ -1,0 +1,190 @@
+use eframe::egui;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
+
+use crate::crawler::{CrawlResult, Crawler, CrawlStats};
+use crate::filter::DomainFilter;
+use tokio::sync::mpsc;
+
+pub struct ExtraLinkApp {
+    pub url: String,
+    pub concurrency: String,
+    pub filter_domains: String,
+    pub results: Vec<(String, String)>,
+    pub is_crawling: bool,
+    pub stats: CrawlStats,
+    pub error_message: Option<String>,
+    pub stop_flag: Option<Arc<AtomicBool>>,
+    pub crawl_thread: Option<thread::JoinHandle<Vec<(CrawlResult, CrawlStats)>>>,
+}
+
+impl ExtraLinkApp {
+    pub fn new() -> Self {
+        ExtraLinkApp {
+            url: String::new(),
+            concurrency: "5".to_string(),
+            filter_domains: String::new(),
+            results: Vec::new(),
+            is_crawling: false,
+            stats: CrawlStats { pages_crawled: 0, links_found: 0 },
+            error_message: None,
+            stop_flag: None,
+            crawl_thread: None,
+        }
+    }
+
+    pub fn start_crawl(&mut self) {
+        if self.url.is_empty() {
+            self.error_message = Some("请输入目标网站URL".to_string());
+            return;
+        }
+
+        let start_url = self.url.trim().to_string();
+        let concurrency: usize = self.concurrency.parse().unwrap_or(5);
+        let filter_domains = self.filter_domains.clone();
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        self.stop_flag = Some(stop_flag.clone());
+
+        self.results.clear();
+        self.stats = CrawlStats { pages_crawled: 0, links_found: 0 };
+        self.is_crawling = true;
+        self.error_message = None;
+
+        // Spawn a thread with a tokio runtime
+        self.crawl_thread = Some(thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+            let (tx, mut rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(100);
+
+            let filter = if filter_domains.is_empty() {
+                DomainFilter::new("")
+            } else {
+                DomainFilter::new(&filter_domains)
+            };
+
+            let crawler = Crawler::new(filter, concurrency);
+            let stop_flag_clone = stop_flag.clone();
+
+            // Run the crawl in async context
+            rt.block_on(async {
+                let _ = crawler.crawl(&start_url, tx, stop_flag_clone).await;
+            });
+
+            // Collect all results from channel after crawl finishes
+            let mut collected = Vec::new();
+            while let Ok((result, stats)) = rx.try_recv() {
+                collected.push((result, stats));
+            }
+            collected
+        }));
+    }
+
+    pub fn stop_crawl(&mut self) {
+        if let Some(stop_flag) = &self.stop_flag {
+            stop_flag.store(true, Ordering::Relaxed);
+        }
+        self.is_crawling = false;
+    }
+
+    fn poll_results(&mut self) {
+        if let Some(handle) = self.crawl_thread.take() {
+            if handle.is_finished() {
+                if let Ok(results) = handle.join() {
+                    for (result, stats) in results {
+                        self.results.push((result.external_url, result.source_url));
+                        self.stats = stats;
+                    }
+                }
+                self.is_crawling = false;
+            } else {
+                // Put it back if not finished
+                self.crawl_thread = Some(handle);
+            }
+        }
+    }
+}
+
+impl eframe::App for ExtraLinkApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll for results if crawling
+        if self.is_crawling {
+            self.poll_results();
+            // Request repaint to update UI
+            ctx.request_repaint();
+        }
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // Error message area
+            if let Some(ref err) = self.error_message {
+                ui.colored_label(egui::Color32::RED, err);
+            }
+
+            // Input section
+            ui.horizontal(|ui| {
+                ui.label("目标网站:");
+                ui.text_edit_singleline(&mut self.url);
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("并发级别:");
+                egui::ComboBox::from_id_salt("concurrency")
+                    .selected_text(&self.concurrency)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.concurrency, "5".to_string(), "低 (5)");
+                        ui.selectable_value(&mut self.concurrency, "10".to_string(), "中 (10)");
+                        ui.selectable_value(&mut self.concurrency, "20".to_string(), "高 (20)");
+                        ui.selectable_value(&mut self.concurrency, "50".to_string(), "极高 (50)");
+                    });
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("过滤域名:");
+                ui.text_edit_singleline(&mut self.filter_domains);
+                ui.label("(可选，每行一个)");
+            });
+
+            ui.horizontal(|ui| {
+                let start_button = ui.add_enabled(!self.is_crawling, egui::Button::new("开始爬取"));
+                if start_button.clicked() {
+                    self.start_crawl();
+                }
+
+                let stop_button = ui.add_enabled(self.is_crawling, egui::Button::new("停止"));
+                if stop_button.clicked() {
+                    self.stop_crawl();
+                }
+            });
+
+            ui.separator();
+
+            // Results header
+            ui.horizontal(|ui| {
+                ui.label("外部链接");
+                ui.label("          所在页面");
+            });
+            ui.separator();
+
+            // Results table
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for (external, source) in &self.results {
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.hyperlink_to(external, external).clicked() {
+                            let _ = open::that(external);
+                        }
+                        ui.label("<-");
+                        if ui.hyperlink_to(source, source).clicked() {
+                            let _ = open::that(source);
+                        }
+                    });
+                }
+            });
+
+            ui.separator();
+
+            // Status bar
+            let status = if self.is_crawling { "爬取中" } else { "已停止" };
+            ui.label(format!("状态: {}  已爬取: {}  已发现: {}",
+                status, self.stats.pages_crawled, self.stats.links_found));
+        });
+    }
+}
