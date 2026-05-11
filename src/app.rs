@@ -121,7 +121,7 @@ impl ExtraLinkApp {
     fn poll_results(&mut self) {
         // Drain all available results from the channel
         if let Some(ref receiver) = self.result_receiver {
-            if let Ok(rx) = receiver.lock() {
+            if let Ok(mut rx) = receiver.lock() {
                 loop {
                     match rx.try_recv() {
                         Ok((result, stats)) => {
