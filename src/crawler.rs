@@ -4,6 +4,7 @@ use scraper::{Html, Selector};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use url::Url;
 
@@ -44,6 +45,7 @@ impl Crawler {
     pub fn new(filter: DomainFilter, concurrency: usize) -> Self {
         let client = Client::builder()
             .user_agent("ExtraLinkDiscover/1.0")
+            .timeout(Duration::from_secs(10))
             .build()
             .unwrap();
         Crawler {

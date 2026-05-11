@@ -78,7 +78,7 @@ impl ExtraLinkApp {
         // Spawn a thread with a tokio runtime
         self.crawl_thread = Some(thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-            let (tx, mut rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(100);
+            let (tx, rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(100);
 
             let filter = if filter_domains.is_empty() {
                 DomainFilter::new("")
@@ -96,7 +96,7 @@ impl ExtraLinkApp {
 
             // Collect all results from channel after crawl finishes
             let mut collected = Vec::new();
-            while let Ok((result, stats)) = rx.try_recv() {
+            while let Ok((result, stats)) = rx.blocking_recv() {
                 collected.push((result, stats));
             }
             collected
