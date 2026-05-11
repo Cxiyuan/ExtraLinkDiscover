@@ -167,7 +167,8 @@ impl eframe::App for ExtraLinkApp {
             ctx.request_repaint();
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        // Top panel for inputs
+        egui::TopPanel::top_only_panel(ctx, egui::LayerId::new(egui::Order::PanelAboveOthers, egui::Id::new("top_panel")), |ui| {
             // Error message area
             if let Some(ref err) = self.error_message {
                 ui.colored_label(egui::Color32::RED, err);
@@ -194,7 +195,7 @@ impl eframe::App for ExtraLinkApp {
             ui.horizontal(|ui| {
                 ui.label("过滤域名:");
                 ui.text_edit_singleline(&mut self.filter_domains);
-                ui.label("(可选，每行一个)");
+                ui.label("(可选，逗号分隔，支持*.domain格式)");
             });
 
             ui.horizontal(|ui| {
@@ -212,49 +213,19 @@ impl eframe::App for ExtraLinkApp {
                     self.clear_results();
                 }
 
+                ui.separator();
+
+                if ui.button("导出CSV").clicked() {
+                    if let Err(e) = self.export_csv() {
+                        self.error_message = Some(format!("导出失败: {}", e));
+                    }
+                }
+
                 let debug_label = if self.show_debug { "关闭调试" } else { "调试" };
                 if ui.button(debug_label).clicked() {
                     self.toggle_debug();
                 }
             });
-
-            ui.separator();
-
-            // Results header
-            ui.horizontal(|ui| {
-                ui.label("外部链接");
-                ui.label("          所在页面");
-            });
-            ui.separator();
-
-            // Results table
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for (external, source) in &self.results {
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.hyperlink_to(external, external).clicked() {
-                            let _ = open::that(external);
-                        }
-                        ui.label("<-");
-                        if ui.hyperlink_to(source, source).clicked() {
-                            let _ = open::that(source);
-                        }
-                    });
-                }
-            });
-
-            ui.separator();
-
-            // Export button
-            if ui.button("导出CSV").clicked() {
-                if let Err(e) = self.export_csv() {
-                    self.error_message = Some(format!("导出失败: {}", e));
-                }
-            }
-
-            // Status bar
-            let status = if self.is_crawling { "爬取中" } else { "已停止" };
-            ui.label(format!("状态: {}  已爬取: {}  已发现: {}",
-                status, self.stats.pages_crawled, self.stats.links_found));
 
             // Debug window
             if self.show_debug {
@@ -269,6 +240,40 @@ impl eframe::App for ExtraLinkApp {
                     ui.label(format!("线程运行中: {}", !handle.is_finished()));
                 }
             }
+        });
+
+        // Central area for results
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // Results header
+            ui.horizontal(|ui| {
+                ui.label("外部链接");
+                ui.label("          所在页面");
+            });
+            ui.separator();
+
+            // Results table - fills remaining space
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for (external, source) in &self.results {
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.hyperlink_to(external, external).clicked() {
+                            let _ = open::that(external);
+                        }
+                        ui.label("<-");
+                        if ui.hyperlink_to(source, source).clicked() {
+                            let _ = open::that(source);
+                        }
+                    });
+                }
+            });
+        });
+
+        // Bottom panel for status
+        egui::BottomPanel::bottom_only_panel(ctx, egui::LayerId::new(egui::Order::PanelAboveOthers, egui::Id::new("bottom_panel")), |ui| {
+            ui.horizontal(|ui| {
+                let status = if self.is_crawling { "爬取中" } else { "已停止" };
+                ui.label(format!("状态: {}  已爬取: {}  已发现: {}",
+                    status, self.stats.pages_crawled, self.stats.links_found));
+            });
         });
     }
 }
