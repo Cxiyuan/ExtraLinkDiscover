@@ -167,7 +167,18 @@ impl Crawler {
                 });
 
                 handles.push(handle);
-                urls_processed.push(url);
+                urls_processed.push(url.clone());
+
+                // Send in-progress stats before waiting for result
+                let in_progress_stats = CrawlStats {
+                    pages_crawled,
+                    links_found,
+                    current_url: url.clone(),
+                };
+                let _ = sender.send((
+                    CrawlResult { external_url: String::new(), source_url: url.clone() },
+                    in_progress_stats,
+                )).await;
             }
 
             // Wait for all handles to complete

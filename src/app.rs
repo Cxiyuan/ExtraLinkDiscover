@@ -140,7 +140,10 @@ impl ExtraLinkApp {
                 loop {
                     match rx.try_recv() {
                         Ok((result, stats)) => {
-                            self.results.push((result.external_url, result.source_url));
+                            // Skip placeholder results (in-progress updates)
+                            if !result.external_url.is_empty() {
+                                self.results.push((result.external_url, result.source_url));
+                            }
                             self.stats = stats;
                         }
                         Err(TryRecvError::Empty) => break,
