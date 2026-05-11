@@ -18,6 +18,7 @@ pub struct CrawlResult {
 pub struct CrawlStats {
     pub pages_crawled: usize,
     pub links_found: usize,
+    pub current_url: String,
 }
 
 impl CrawlStats {
@@ -25,6 +26,7 @@ impl CrawlStats {
         CrawlStats {
             pages_crawled: 0,
             links_found: 0,
+            current_url: String::new(),
         }
     }
 }
@@ -183,6 +185,7 @@ impl Crawler {
                         let stats = CrawlStats {
                             pages_crawled,
                             links_found,
+                            current_url: url.clone(),
                         };
                         let _ = sender.send((result, stats)).await;
                     }

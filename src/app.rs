@@ -20,6 +20,7 @@ pub struct ExtraLinkApp {
     pub crawl_handle: Option<thread::JoinHandle<()>>,
     pub result_receiver: Option<Arc<Mutex<mpsc::Receiver<(CrawlResult, CrawlStats)>>>>,
     pub show_debug: bool,
+    pub current_crawl_url: String,
 }
 
 impl ExtraLinkApp {
@@ -60,6 +61,7 @@ impl ExtraLinkApp {
             crawl_handle: None,
             result_receiver: None,
             show_debug: false,
+            current_crawl_url: String::new(),
         }
     }
 
@@ -76,9 +78,10 @@ impl ExtraLinkApp {
         self.stop_flag = Some(stop_flag.clone());
 
         self.results.clear();
-        self.stats = CrawlStats { pages_crawled: 0, links_found: 0 };
+        self.stats = CrawlStats { pages_crawled: 0, links_found: 0, current_url: String::new() };
         self.is_crawling = true;
         self.error_message = None;
+        self.current_crawl_url = start_url.clone();
 
         // Spawn a thread with a tokio runtime
         let (tx, rx) = mpsc::channel::<(CrawlResult, CrawlStats)>(1000);
@@ -275,6 +278,10 @@ impl eframe::App for ExtraLinkApp {
                     let status = if self.is_crawling { "爬取中" } else { "已停止" };
                     ui.label(format!("状态: {}  已爬取: {}  已发现: {}",
                         status, self.stats.pages_crawled, self.stats.links_found));
+                    if self.is_crawling {
+                        ui.separator();
+                        ui.label(format!("正在爬取: {}", self.current_crawl_url));
+                    }
                 });
             });
     }
