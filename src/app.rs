@@ -19,6 +19,7 @@ pub struct ExtraLinkApp {
     pub stop_flag: Option<Arc<AtomicBool>>,
     pub crawl_handle: Option<thread::JoinHandle<()>>,
     pub result_receiver: Option<Arc<Mutex<mpsc::Receiver<(CrawlResult, CrawlStats)>>>>,
+    pub show_debug: bool,
 }
 
 impl ExtraLinkApp {
@@ -58,6 +59,7 @@ impl ExtraLinkApp {
             stop_flag: None,
             crawl_handle: None,
             result_receiver: None,
+            show_debug: false,
         }
     }
 
@@ -116,6 +118,16 @@ impl ExtraLinkApp {
         }
         wtr.flush().map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub fn clear_results(&mut self) {
+        self.results.clear();
+        self.stats = CrawlStats { pages_crawled: 0, links_found: 0 };
+        self.error_message = None;
+    }
+
+    pub fn toggle_debug(&mut self) {
+        self.show_debug = !self.show_debug;
     }
 
     fn poll_results(&mut self) {
@@ -195,6 +207,15 @@ impl eframe::App for ExtraLinkApp {
                 if stop_button.clicked() {
                     self.stop_crawl();
                 }
+
+                if ui.button("清除").clicked() {
+                    self.clear_results();
+                }
+
+                let debug_label = if self.show_debug { "关闭调试" } else { "调试" };
+                if ui.button(debug_label).clicked() {
+                    self.toggle_debug();
+                }
             });
 
             ui.separator();
@@ -234,6 +255,20 @@ impl eframe::App for ExtraLinkApp {
             let status = if self.is_crawling { "爬取中" } else { "已停止" };
             ui.label(format!("状态: {}  已爬取: {}  已发现: {}",
                 status, self.stats.pages_crawled, self.stats.links_found));
+
+            // Debug window
+            if self.show_debug {
+                ui.separator();
+                ui.label("调试信息:");
+                ui.label(format!("URL: {}", self.url));
+                ui.label(format!("并发级别: {}", self.concurrency));
+                ui.label(format!("过滤域名: {}", self.filter_domains));
+                ui.label(format!("结果数量: {}", self.results.len()));
+                ui.label(format!("爬取状态: {}", if self.is_crawling { "爬取中" } else { "已停止" }));
+                if let Some(handle) = &self.crawl_handle {
+                    ui.label(format!("线程运行中: {}", !handle.is_finished()));
+                }
+            }
         });
     }
 }
