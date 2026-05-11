@@ -21,24 +21,28 @@ pub struct ExtraLinkApp {
 
 impl ExtraLinkApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Configure Chinese font
+        // Configure Chinese font - try to load from system font directory
         let mut fonts = egui::FontDefinitions::default();
-        fonts.font_data.insert(
-            "simsun".to_owned(),
-            std::sync::Arc::new(egui::FontData::from_path(
-                std::path::PathBuf::from("C:\\Windows\\Fonts\\simsun.ttc"),
-            ).expect("Failed to load simsun font")),
-        );
-        fonts
-            .families
-            .entry(egui::FontFamily::Proportional)
-            .or_default()
-            .insert(0, "simsun".to_owned());
-        fonts
-            .families
-            .entry(egui::FontFamily::Monospace)
-            .or_default()
-            .push("simsun".to_owned());
+
+        // Try to load simsun font from Windows fonts directory
+        let font_path = std::path::PathBuf::from("C:\\Windows\\Fonts\\simsun.ttc");
+        if let Ok(font_data) = std::fs::read(&font_path) {
+            fonts.font_data.insert(
+                "simsun".to_owned(),
+                std::sync::Arc::new(egui::FontData::from_owned(font_data)),
+            );
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, "simsun".to_owned());
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .push("simsun".to_owned());
+        }
+
         cc.egui_ctx.set_fonts(fonts);
 
         ExtraLinkApp {
