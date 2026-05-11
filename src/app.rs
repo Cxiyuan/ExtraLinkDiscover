@@ -20,7 +20,27 @@ pub struct ExtraLinkApp {
 }
 
 impl ExtraLinkApp {
-    pub fn new() -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Configure Chinese font
+        let mut fonts = egui::FontDefinitions::default();
+        fonts.font_data.insert(
+            "simsun".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_path(
+                std::path::PathBuf::from("C:\\Windows\\Fonts\\simsun.ttc"),
+            ).expect("Failed to load simsun font")),
+        );
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "simsun".to_owned());
+        fonts
+            .families
+            .entry(egui::FontFamily::Monospace)
+            .or_default()
+            .push("simsun".to_owned());
+        cc.egui_ctx.set_fonts(fonts);
+
         ExtraLinkApp {
             url: String::new(),
             concurrency: "5".to_string(),
