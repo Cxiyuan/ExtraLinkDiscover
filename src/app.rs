@@ -114,6 +114,17 @@ impl ExtraLinkApp {
             stop_flag.store(true, Ordering::Relaxed);
         }
         self.is_crawling = false;
+        // Drain any remaining results from the channel before cleanup
+        if let Some(ref receiver) = self.result_receiver {
+            if let Ok(mut rx) = receiver.lock() {
+                while let Ok((result, stats)) = rx.try_recv() {
+                    if !result.external_url.is_empty() {
+                        self.results.push((result.external_url, result.source_url));
+                    }
+                    self.stats = stats;
+                }
+            }
+        }
         // Clean up receiver and handle to prevent resource leaks
         self.result_receiver = None;
         self.crawl_handle = None;
@@ -161,7 +172,10 @@ impl ExtraLinkApp {
                             processed += 1;
                         }
                         Err(TryRecvError::Empty) => break,
-                        Err(TryRecvError::Disconnected) => break,
+                        Err(TryRecvError::Disconnected) => {
+                            // Drain any remaining results before exiting
+                            break;
+                        }
                     }
                 }
             }

@@ -11,7 +11,7 @@ fn main() {
     unsafe { FreeConsole(); }
     let options = eframe::NativeOptions::default();
     eframe::run_native(
-        "ExtraLinkDiscover",
+        "外链爬取",
         options,
         Box::new(|cc| Ok(Box::new(app::ExtraLinkApp::new(cc)))),
     );
