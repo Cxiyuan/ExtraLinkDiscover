@@ -31,18 +31,11 @@ impl DomainFilter {
                             return true;
                         }
                     } else if !domain.is_empty() {
-                        // Non-wildcard: only match exact domain or immediate subdomains
-                        // Use ends_with but require the prefix before . is the same as domain
                         if host_lower == *domain {
                             return true;
                         }
-                        // Only match subdomains if the prefix matches the domain exactly
-                        // e.g., "example.com" matches "www.example.com" but NOT "notexample.com"
                         if host_lower.ends_with(&format!(".{}", domain)) {
-                            let prefix = &host_lower[..host_lower.len() - domain.len() - 1];
-                            if !prefix.is_empty() && !prefix.contains('.') {
-                                return true;
-                            }
+                            return true;
                         }
                     }
                 }
