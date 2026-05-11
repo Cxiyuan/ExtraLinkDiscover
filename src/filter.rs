@@ -25,15 +25,12 @@ impl DomainFilter {
             if let Some(host) = parsed.host_str() {
                 let host_lower = host.to_lowercase();
                 for domain in &self.blocked_domains {
-                    // Handle wildcard patterns like *.nczy.edu.cn
                     if domain.starts_with("*.") {
-                        let base_domain = &domain[2..]; // Remove "*."
-                        // Match if host equals base_domain or ends with ".base_domain"
+                        let base_domain = &domain[2..];
                         if host_lower == base_domain || host_lower.ends_with(&format!(".{}", base_domain)) {
                             return true;
                         }
-                    } else {
-                        // Normal domain matching
+                    } else if !domain.is_empty() {
                         if host_lower == *domain || host_lower.ends_with(&format!(".{}", domain)) {
                             return true;
                         }
