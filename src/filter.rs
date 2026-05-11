@@ -8,6 +8,7 @@ impl DomainFilter {
     pub fn new(input: &str) -> Self {
         // Support both comma and newline separated domains
         let domains: Vec<String> = input
+            .replace('，', ",")
             .split(|c| c == ',' || c == '\n')
             .map(|s| s.trim().to_lowercase())
             .filter(|s| !s.is_empty())
