@@ -137,20 +137,17 @@ impl Crawler {
                                             .map(|u| u.to_string())
                                             .unwrap_or_else(|| href.to_string());
 
-                                        // Check if it should be filtered
-                                        if filter.should_filter(&full_url) {
-                                            continue;
-                                        }
-
                                         // Check if it's an external link (different domain)
                                         if let Ok(parsed) = Url::parse(&full_url) {
                                             if let Some(host) = parsed.host_str() {
                                                 let host_lower = host.to_lowercase();
                                                 if host_lower != base_domain {
-                                                    // External link
-                                                    external_links.push(full_url);
+                                                    // External link - only add if not filtered
+                                                    if !filter.should_filter(&full_url) {
+                                                        external_links.push(full_url);
+                                                    }
                                                 } else {
-                                                    // Same domain, potential internal link
+                                                    // Same domain, potential internal link - crawl regardless of filter
                                                     internal_links.push(full_url);
                                                 }
                                             }
