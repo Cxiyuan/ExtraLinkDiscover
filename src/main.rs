@@ -1,14 +1,16 @@
-#![cfg(windows)]
-extern "system" {
-    fn FreeConsole() -> i32;
-}
-
 mod app;
 mod crawler;
 mod filter;
 
 fn main() {
-    unsafe { FreeConsole(); }
+    // FreeConsole is only needed on Windows to hide the console window
+    #[cfg(windows)]
+    unsafe {
+        extern "system" {
+            fn FreeConsole() -> i32;
+        }
+        FreeConsole();
+    }
     let options = eframe::NativeOptions::default();
     eframe::run_native(
         "外链爬取",
