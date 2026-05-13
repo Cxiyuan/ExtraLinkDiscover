@@ -169,6 +169,7 @@ impl ExtraLinkApp {
                                 self.results.push((result.external_url, result.source_url));
                             }
                             self.stats = stats;
+                            self.current_crawl_url = stats.current_url;
                             processed += 1;
                         }
                         Err(TryRecvError::Empty) => break,
