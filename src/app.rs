@@ -154,6 +154,8 @@ impl ExtraLinkApp {
         // Limit how many results we process per frame to prevent UI stutter
         const MAX_RESULTS_PER_FRAME: usize = 50;
 
+        let mut channel_disconnected = false;
+
         if let Some(ref receiver) = self.result_receiver {
             if let Ok(mut rx) = receiver.lock() {
                 let mut processed = 0;
@@ -165,27 +167,43 @@ impl ExtraLinkApp {
                     match rx.try_recv() {
                         Ok((result, stats)) => {
                             // Skip placeholder results (in-progress updates)
+                            let current_url = stats.current_url.clone();
                             if !result.external_url.is_empty() {
                                 self.results.push((result.external_url, result.source_url));
                             }
                             self.stats = stats;
-                            self.current_crawl_url = stats.current_url;
+                            self.current_crawl_url = current_url;
                             processed += 1;
                         }
                         Err(TryRecvError::Empty) => break,
                         Err(TryRecvError::Disconnected) => {
-                            // Drain any remaining results before exiting
-                            break;
+                            // Mark as disconnected and continue to drain any remaining buffered messages
+                            channel_disconnected = true;
                         }
                     }
                 }
             }
         }
 
-        // Check if crawl is finished
-        if let Some(handle) = self.crawl_handle.take() {
+        // Check if crawl is finished - only stop crawling when channel is disconnected AND handle is finished
+        if channel_disconnected {
+            if let Some(handle) = self.crawl_handle.take() {
+                if handle.is_finished() {
+                    // Channel disconnected and thread finished - safe to stop
+                    self.is_crawling = false;
+                    self.crawl_handle = None;
+                } else {
+                    // Thread still running but channel disconnected - keep handle for now
+                    self.crawl_handle = Some(handle);
+                }
+            } else {
+                // No handle (already taken) - channel is disconnected, stop crawling
+                self.is_crawling = false;
+            }
+        } else if let Some(handle) = self.crawl_handle.take() {
             if handle.is_finished() {
                 self.is_crawling = false;
+                self.crawl_handle = None;
             } else {
                 self.crawl_handle = Some(handle);
             }
