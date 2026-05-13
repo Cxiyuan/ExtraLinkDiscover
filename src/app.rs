@@ -126,10 +126,12 @@ impl ExtraLinkApp {
         if let Some(ref receiver) = self.result_receiver {
             if let Ok(mut rx) = receiver.lock() {
                 while let Ok((result, stats)) = rx.try_recv() {
+                    let current_url = stats.current_url.clone();
                     if !result.external_url.is_empty() {
                         self.results.push((result.external_url, result.source_url));
                     }
                     self.stats = stats;
+                    self.current_crawl_url = current_url;
                 }
             }
         }
