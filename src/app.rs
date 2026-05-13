@@ -110,11 +110,19 @@ impl ExtraLinkApp {
     }
 
     pub fn stop_crawl(&mut self) {
+        // Trigger the stop flag
         if let Some(stop_flag) = &self.stop_flag {
             stop_flag.store(true, Ordering::Relaxed);
         }
-        self.is_crawling = false;
-        // Drain any remaining results from the channel before cleanup
+
+        // Take the handle to clean it up
+        if let Some(handle) = self.crawl_handle.take() {
+            // Wait for thread to finish before cleaning up resources
+            // This ensures we don't close the receiver while the crawler is still sending
+            let _ = handle.join();
+        }
+
+        // Now drain any remaining results from the channel
         if let Some(ref receiver) = self.result_receiver {
             if let Ok(mut rx) = receiver.lock() {
                 while let Ok((result, stats)) = rx.try_recv() {
@@ -125,9 +133,10 @@ impl ExtraLinkApp {
                 }
             }
         }
-        // Clean up receiver and handle to prevent resource leaks
+
+        // Clean up receiver
         self.result_receiver = None;
-        self.crawl_handle = None;
+        self.is_crawling = false;
     }
 
     pub fn export_csv(&self) -> Result<(), String> {

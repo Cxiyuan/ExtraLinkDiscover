@@ -101,10 +101,15 @@ impl Crawler {
                     None => break,
                 };
 
-                if visited.contains(&url) {
+                // Atomically check and mark as visited to prevent race conditions
+                // between concurrent tasks pushing the same URL to the queue
+                if visited.insert(url.clone()) {
+                    // URL was not previously visited (insert returned true)
+                    urls_processed.push(url.clone());
+                } else {
+                    // URL was already visited by another task, skip
                     continue;
                 }
-                visited.insert(url.clone());
 
                 let client = self.client.clone();
                 let filter = self.filter.clone();
